@@ -28,6 +28,10 @@ canvas {
     outline: none;
 }
 
+canvas.drag-over {
+    box-shadow: inset 0 0 0 3px rgba(5, 242, 219, 0.9);
+}
+
 /* Sidebar Flottante (Glassmorphism) */
 #ui-container {
     position: absolute;

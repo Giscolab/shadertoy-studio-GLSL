@@ -11,6 +11,8 @@ import { params, audioParams, videoParams } from './Config.js';
 import { AudioEngine } from './AudioEngine.js';
 import { VideoRecorder } from './VideoRecorder.js';
 import { MidiHandler } from './MidiHandler.js';
+import { buildShadertoyExport } from './ShadertoyExporter.js';
+import { WebGPUCompute } from './WebGPUCompute.js';
 
 // ── Post-process custom shaders (GLSL Babylon compatible) ────────────────────
 
@@ -176,6 +178,13 @@ export class App {
         this._stMouse       = { x:0, y:0, z:0, w:0 };
         this._stMouseDown   = false;
         this._stFlipY       = false;   // toggle Y-flip pour corriger l'orientation Babylon
+        this.webgpuCompute = new WebGPUCompute();
+        this._computeState = {
+            supported: WebGPUCompute.isSupported() ? 'Oui ✅' : 'Non ❌',
+            status: 'Inactif',
+            particles: 4096,
+            sample: '(aucun)',
+        };
         // Audio FFT texture (iChannel0 when audio active)
         this._fftTexture    = null;
         this._fftCanvas     = null;
@@ -520,6 +529,19 @@ export class App {
             this._showSuccess('💾 Shader exporté en .glsl !');
         });
 
+        document.getElementById('btn-export-shadertoy')?.addEventListener('click', () => {
+            const code = buildShadertoyExport(this.debugObject);
+            const blob = new Blob([code], { type: 'text/plain' });
+            const url  = URL.createObjectURL(blob);
+            const a    = document.createElement('a');
+            a.href     = url;
+            a.download = `shadertoy-export-${Date.now()}.glsl`;
+            a.click();
+            URL.revokeObjectURL(url);
+            if (this.editor) this.editor.setValue(code);
+            this._showSuccess('🚀 Export Shadertoy généré (.glsl)');
+        });
+
         document.getElementById('btn-clear')?.addEventListener('click', () => {
             if (confirm('Vider l\'éditeur ?')) {
                 this.editor.setValue('');
@@ -759,9 +781,9 @@ export class App {
 
         const tabs=this.pane.addTab({ pages:[
             {title:'🎨 Shader'},{title:'🎵 Audio'},{title:'✨ Post FX'},
-            {title:'🎬 Export'},{title:'⚙️ Scène'},{title:' MIDI'},{title:'🎮 ShaderToy'},{title:'📊 Perf'},
+            {title:'🎬 Export'},{title:'⚙️ Scène'},{title:' MIDI'},{title:'🎮 ShaderToy'},{title:'🧪 Compute'},{title:'📊 Perf'},
         ]});
-        const [tShader,tAudio,tPost,tExport,tScene,tMidi,tST,tPerf]=tabs.pages;
+        const [tShader,tAudio,tPost,tExport,tScene,tMidi,tST,tCompute,tPerf]=tabs.pages;
 
         // ════════ SHADER ════════
         const fPre=tShader.addFolder({title:'⭐ Presets',expanded:true});
@@ -998,6 +1020,9 @@ export class App {
 
         // ════════ SHADERTOY ════════
         this._buildShaderToyTab(tST);
+
+        // ════════ COMPUTE / WEBGPU ════════
+        this._buildComputeTab(tCompute);
 
         // ════════ UNDO / REDO ════════
         const fHist = tScene.addFolder({ title:'↩️ Historique', expanded:false });
@@ -1324,6 +1349,56 @@ export class App {
         const tips = tab.addFolder({ title: '💡 Guide', expanded: false });
         const tipsText = { t: '1. Collez votre code ShaderToy dans l\'éditeur ({})\n2. Le mode est détecté automatiquement (badge orange)\n3. Ctrl+S compile et active\n4. iChannel0 = FFT audio en temps réel\n5. uBass/uMid/uHigh = niveaux audio (0-1)\n6. mainImage(out vec4, in vec2) requis' };
         tips.addBinding(tipsText, 't', { label: 'Aide', readonly: true, multiline: true, rows: 8 });
+    }
+
+    _downloadTextFile(filename, content) {
+        const blob = new Blob([content], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    _buildComputeTab(tab) {
+        const fState = tab.addFolder({ title: 'ℹ️ WebGPU', expanded: true });
+        fState.addBinding(this._computeState, 'supported', { label: 'Support', readonly: true });
+        this._computeStatusBinding = fState.addBinding(this._computeState, 'status', { label: 'État', readonly: true });
+        fState.addBinding(this._computeState, 'sample', { label: 'Sample', readonly: true });
+
+        const fRun = tab.addFolder({ title: '⚙️ Simulation GPU', expanded: true });
+        fRun.addBinding(this._computeState, 'particles', { label: 'Particules', min: 256, max: 65536, step: 256 });
+
+        fRun.addButton({ title: '▶ Lancer 1 step compute' }).on('click', async () => {
+            if (!WebGPUCompute.isSupported()) {
+                this._computeState.status = 'WebGPU indisponible';
+                this._computeStatusBinding?.refresh();
+                this._showError('WebGPU non supporté sur ce navigateur');
+                return;
+            }
+
+            try {
+                this._computeState.status = 'Exécution…';
+                this._computeStatusBinding?.refresh();
+                const out = await this.webgpuCompute.runParticleSimulation({ particleCount: this._computeState.particles, deltaTime: 0.016 });
+                this._computeState.status = `OK (${out.particleCount} particules)`;
+                this._computeState.sample = `${out.sample.x.toFixed(3)}, ${out.sample.y.toFixed(3)}`;
+                this._showSuccess('🧪 Step compute WebGPU exécuté');
+            } catch (err) {
+                this._computeState.status = 'Erreur';
+                this._showError(`Compute shader: ${err.message}`);
+            } finally {
+                this._computeStatusBinding?.refresh();
+                this.pane?.refresh();
+            }
+        });
+
+        fRun.addButton({ title: '🚀 Export conversion Shadertoy' }).on('click', () => {
+            const code = buildShadertoyExport(this.debugObject);
+            this._downloadTextFile(`shadertoy-export-${Date.now()}.glsl`, code);
+            this._showSuccess('🚀 Fichier Shadertoy exporté');
+        });
     }
 
     // ── Bloom radius helpers ──────────────────────────────────────────────────

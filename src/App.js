@@ -1434,7 +1434,16 @@ export class App {
     _applyChange(p,val){
         switch(p.id){
             case 'geometryType':  this.updateGeometry(val); return;
-            case 'noiseType':     this._createShaderMaterial(val, this.currentTexture, this.currentMatcap, this.editor ? this.editor.getValue() : null); return;
+            case 'noiseType': {
+                const code = this.editor ? this.editor.getValue() : null;
+                if (code && App.detectShaderToy(code)) {
+                    // En mode ShaderToy, le noise chunk 3D ne s'applique pas.
+                    this.compileShadertoy(code);
+                    return;
+                }
+                this._createShaderMaterial(val, this.currentTexture, this.currentMatcap, code);
+                return;
+            }
             case 'wireframe':     this.material.wireframe=val; return;
             case 'cyberpunkMode': this.pipeline.chromaticAberrationEnabled=val; return;
             case 'glitchMode':

@@ -300,6 +300,12 @@ export const fragmentShaderMain = `
     uniform float uSpeed;
     uniform sampler2D uTexture;
     uniform float uTextureMix;
+    uniform sampler2D uLayer1;
+    uniform sampler2D uLayer2;
+    uniform float uLayerBlend1;
+    uniform float uLayerBlend2;
+    uniform float uLayerOpacity1;
+    uniform float uLayerOpacity2;
     uniform vec2  uMouse;
     uniform sampler2D uMatcap;
     uniform float uMetalness;
@@ -330,6 +336,19 @@ export const fragmentShaderMain = `
     varying float vNoise;
 
     vec3 sat(vec3 c,float s){float l=dot(c,vec3(.299,.587,.114));return mix(vec3(l),c,s);}
+
+    vec3 blendLayer(vec3 base, vec3 layer, float mode, float opacity) {
+        vec3 blended = layer;
+        if (mode < 0.5) {
+            blended = base + layer;
+        } else if (mode < 1.5) {
+            blended = base * layer;
+        } else {
+            vec3 over = mix(2.0 * base * layer, 1.0 - 2.0 * (1.0 - base) * (1.0 - layer), step(0.5, base));
+            blended = over;
+        }
+        return mix(base, clamp(blended, 0.0, 1.0), clamp(opacity, 0.0, 1.0));
+    }
     
     // Fresnel approx (View Space Z is depth)
     float fresnel(vec3 n,float p){ return pow(1.-abs(n.z), p); }
@@ -365,6 +384,11 @@ export const fragmentShaderMain = `
         // Texture
         vec4 tex=texture2D(uTexture,vUv+n*.05);
         color=mix(color,tex.rgb,uTextureMix);
+
+        vec3 l1 = texture2D(uLayer1, vUv).rgb;
+        vec3 l2 = texture2D(uLayer2, vUv).rgb;
+        color = blendLayer(color, l1, uLayerBlend1, uLayerOpacity1);
+        color = blendLayer(color, l2, uLayerBlend2, uLayerOpacity2);
 
         // Matcap
         vec3 mc=texture2D(uMatcap,vMatcapUV).rgb;

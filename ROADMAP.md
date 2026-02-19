@@ -11,12 +11,12 @@ Voici les fonctionnalités prévues pour les futures versions de Shader Studio.
 - [x] **Capture Transparente** : Option pour exporter des PNG avec fond transparent (alpha channel) pour le compositing.
 
 ## 🛠 Moyen Terme (v6.0)
-- [ ] **Textures Vidéo / Webcam** : Utiliser le flux de la caméra ou un fichier vidéo comme texture d'entrée (`uTexture`).
-- [ ] **Système de Calques (Layers)** : Pouvoir empiler plusieurs shaders avec des modes de fusion (Add, Multiply, Overlay).
-- [ ] **Export GIF** : Option d'export plus légère pour les réseaux sociaux.
-- [ ] **Mode VR / WebXR** : Immerger l'utilisateur dans le shader en réalité virtuelle.
-- [ ] **Support OSC (Open Sound Control)** : Recevoir des données de logiciels tiers (TouchDesigner, Ableton) via WebSocket.
-- [ ] **Bibliothèque de Textures** : Gestionnaire d'assets local pour stocker et réutiliser ses propres images.
+- [x] **Textures Vidéo / Webcam** : Utiliser le flux de la caméra ou un fichier vidéo comme texture d'entrée (`uTexture`).
+- [x] **Système de Calques (Layers)** : Empilement de couches texture avec modes de fusion Add / Multiply / Overlay.
+- [x] **Export GIF** : Export GIF (beta) avec fallback automatique vers MP4/WebM selon le support navigateur.
+- [x] **Mode VR / WebXR** : Entrée en session immersive via WebXR (si navigateur/casque compatibles).
+- [x] **Support OSC (Open Sound Control)** : Réception d'événements OSC via WebSocket JSON et mapping vers paramètres shader.
+- [x] **Bibliothèque de Textures** : Bibliothèque locale persistée (localStorage) pour réutiliser ses textures importées.
 
 ## 🔮 Long Terme / R&D
 - [ ] **Éditeur Nodal** : Remplacer la pile d'effets fixe par un graphe nodal visuel (comme Blender ou TouchDesigner).

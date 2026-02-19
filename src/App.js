@@ -134,6 +134,13 @@ export class App {
         this.material = null;
         this.currentTexture = null;
         this.currentMatcap = null;
+        this.textureLibrary = [];
+        this.layerTextures = { layer1: null, layer2: null };
+        this.oscSocket = null;
+        this.oscState = { status: 'Déconnecté', url: 'ws://localhost:8081', route: '/shader' };
+        this._videoTexture = null;
+        this._videoElement = null;
+        this._webcamStream = null;
         
         // Pipeline Post-Process
         this.pipeline = null;
@@ -176,6 +183,7 @@ export class App {
 
         this._playerState = { status:'⏹ Stopped', time:'0:00 / 0:00', bpm:'-- BPM', file:'Aucun fichier' };
         this._recordState = { status:'⏹ Prêt', progress:0, info:'' };
+        this._gifState = { status:'⏹ Prêt', fps:12, duration:3, width:512, height:512 };
         this._history = { undoStack: [], redoStack: [], max: 80, isRestoring: false };
         this._dragDepth = 0;
 
@@ -242,6 +250,7 @@ export class App {
         // Post-Processing
         this._initPostProcessing();
         this._initVideoRecorderDefaults();
+        this._loadTextureLibrary();
         this._initPane();
         this._initAudioCallbacks();
 
@@ -412,15 +421,18 @@ export class App {
                 "uScale", "uSpeed", "uTwist", "uPulse", "uMorphFactor", "uDisplacementStrength",
                 "uMetalness", "uLightIntensity", "uRimPower", "uFresnelStrength", "uGlowRadius",
                 "uContrast", "uSaturation", "uGamma", "uTextureMix",
+                "uLayerBlend1", "uLayerBlend2", "uLayerOpacity1", "uLayerOpacity2",
                 "uBass", "uMid", "uHigh", "uOverall",
                 "uBassDisplace", "uMidDisplace", "uHighDisplace"
             ],
-            samplers: ["uTexture", "uMatcap"]
+            samplers: ["uTexture", "uMatcap", "uLayer1", "uLayer2"]
         });
 
         this.material.backFaceCulling = false; // DoubleSide
         this.material.setTexture("uTexture", texture);
         this.material.setTexture("uMatcap", matcap);
+        this.material.setTexture("uLayer1", texture);
+        this.material.setTexture("uLayer2", matcap);
         this.material.setVector2("uResolution", new BABYLON.Vector2(this.canvas.width, this.canvas.height));
 
         // Gestion d'erreur de compilation
@@ -666,6 +678,79 @@ export class App {
         this.audio.onTimeUpdate=(cur,dur)=>{ this._playerState.time=`${fmt(cur)} / ${fmt(dur)}`; if(this._timeB) this._timeB.refresh(); };
     }
 
+    _saveTextureLibrary() {
+        try {
+            localStorage.setItem('shaderStudioV5_textures', JSON.stringify(this.textureLibrary));
+        } catch (e) {
+            console.warn('Texture library save failed', e);
+        }
+    }
+
+    _loadTextureLibrary() {
+        try {
+            const raw = localStorage.getItem('shaderStudioV5_textures');
+            this.textureLibrary = raw ? JSON.parse(raw) : [];
+        } catch (e) {
+            this.textureLibrary = [];
+        }
+    }
+
+    _addTextureToLibrary(name, dataUrl) {
+        this.textureLibrary.unshift({ id: `tex-${Date.now()}`, name, dataUrl });
+        this.textureLibrary = this.textureLibrary.slice(0, 24);
+        this._saveTextureLibrary();
+    }
+
+    _setLayerTexture(layerId, source) {
+        const tex = new BABYLON.Texture(source, this.scene);
+        this.layerTextures[layerId] = tex;
+        if (this.material) this.material.setTexture(layerId === 'layer1' ? 'uLayer1' : 'uLayer2', tex);
+    }
+
+    async _setVideoTextureFromFile(file) {
+        this._stopVideoTexture();
+        const url = URL.createObjectURL(file);
+        const video = document.createElement('video');
+        video.src = url;
+        video.autoplay = true;
+        video.loop = true;
+        video.muted = true;
+        video.playsInline = true;
+        await video.play();
+        this._videoElement = video;
+        this._videoTexture = new BABYLON.VideoTexture('videoTexture', video, this.scene, true, false);
+        this.material.setTexture('uTexture', this._videoTexture);
+        this.currentTexture = this._videoTexture;
+        this._showSuccess(`🎬 Vidéo en texture: ${file.name}`);
+    }
+
+    async _setWebcamTexture() {
+        this._stopVideoTexture();
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        const video = document.createElement('video');
+        video.srcObject = stream;
+        video.autoplay = true;
+        video.muted = true;
+        video.playsInline = true;
+        await video.play();
+        this._webcamStream = stream;
+        this._videoElement = video;
+        this._videoTexture = new BABYLON.VideoTexture('webcamTexture', video, this.scene, true, false);
+        this.material.setTexture('uTexture', this._videoTexture);
+        this.currentTexture = this._videoTexture;
+        this._showSuccess('📷 Webcam activée en uTexture');
+    }
+
+    _stopVideoTexture() {
+        if (this._videoTexture) { this._videoTexture.dispose(); this._videoTexture = null; }
+        if (this._videoElement?.src) URL.revokeObjectURL(this._videoElement.src);
+        if (this._webcamStream) {
+            this._webcamStream.getTracks().forEach(t => t.stop());
+            this._webcamStream = null;
+        }
+        this._videoElement = null;
+    }
+
     // ── Tweakpane ─────────────────────────────────────────────────────────────
 
     _initPane(){
@@ -697,19 +782,56 @@ export class App {
         const fMat=tShader.addFolder({title:'💎 Matière',expanded:false});
         ['uMetalness','uLightIntensity','uRimPower','uFresnelStrength','uGlowRadius'].forEach(id=>this._bind(fMat,id));
 
-        const fImg=tShader.addFolder({title:'🖼 Image',expanded:false});
-        ['uContrast','uSaturation','uGamma','uTextureMix'].forEach(id=>this._bind(fImg,id));
+        const fImg=tShader.addFolder({title:'🖼 Image / Vidéo / Layers',expanded:false});
+        ['uContrast','uSaturation','uGamma','uTextureMix','uLayerOpacity1','uLayerOpacity2'].forEach(id=>this._bind(fImg,id));
+
+        const blendModes = { Add:0, Multiply:1, Overlay:2 };
+        fImg.addBinding(this.debugObject, 'uLayerBlend1', { label:'Layer1 Blend', options: blendModes })
+            .on('change', ev => this.material.setFloat('uLayerBlend1', ev.value));
+        fImg.addBinding(this.debugObject, 'uLayerBlend2', { label:'Layer2 Blend', options: blendModes })
+            .on('change', ev => this.material.setFloat('uLayerBlend2', ev.value));
         
         const fi=document.createElement('input'); fi.type='file'; fi.accept='image/*'; fi.style.display='none';
         document.body.appendChild(fi);
         fi.addEventListener('change',e=>{ 
-            const f=e.target.files[0]; if(!f) return; 
+            const f=e.target.files[0]; if(!f) return;
+            const reader = new FileReader();
+            reader.onload = () => this._addTextureToLibrary(f.name, reader.result);
+            reader.readAsDataURL(f);
             const url = URL.createObjectURL(f);
             const tex = new BABYLON.Texture(url, this.scene);
             this.material.setTexture("uTexture", tex);
             this.currentTexture = tex;
         });
+
+        const fv=document.createElement('input'); fv.type='file'; fv.accept='video/*'; fv.style.display='none';
+        document.body.appendChild(fv);
+        fv.addEventListener('change', async e => {
+            const f=e.target.files[0]; if(!f) return;
+            await this._setVideoTextureFromFile(f);
+        });
+
+        const fl1=document.createElement('input'); fl1.type='file'; fl1.accept='image/*'; fl1.style.display='none';
+        const fl2=document.createElement('input'); fl2.type='file'; fl2.accept='image/*'; fl2.style.display='none';
+        document.body.appendChild(fl1); document.body.appendChild(fl2);
+        fl1.addEventListener('change',e=>{ const f=e.target.files[0]; if(!f) return; this._setLayerTexture('layer1', URL.createObjectURL(f)); this._showSuccess(`🧱 Layer1: ${f.name}`); });
+        fl2.addEventListener('change',e=>{ const f=e.target.files[0]; if(!f) return; this._setLayerTexture('layer2', URL.createObjectURL(f)); this._showSuccess(`🧱 Layer2: ${f.name}`); });
+
+        const texOptions = () => Object.fromEntries(this.textureLibrary.map(t => [t.name, t.id]));
+        const libraryPick = { textureId: this.textureLibrary[0]?.id || '' };
+        const libraryBinding = fImg.addBinding(libraryPick, 'textureId', { label:'Bibliothèque', options: texOptions() });
+        libraryBinding.on('change', ev => {
+            const tex = this.textureLibrary.find(t => t.id === ev.value);
+            if (!tex) return;
+            this.material.setTexture('uTexture', new BABYLON.Texture(tex.dataUrl, this.scene));
+            this._showSuccess(`📚 Texture appliquée: ${tex.name}`);
+        });
+
         fImg.addButton({title:'📁 Upload Texture'}).on('click',()=>fi.click());
+        fImg.addButton({title:'🎬 Charger vidéo'}).on('click',()=>fv.click());
+        fImg.addButton({title:'📷 Webcam → uTexture'}).on('click',()=>this._setWebcamTexture().catch(err=>this._showError(`Webcam indisponible: ${err.message}`)));
+        fImg.addButton({title:'🧱 Layer1 image'}).on('click',()=>fl1.click());
+        fImg.addButton({title:'🧱 Layer2 image'}).on('click',()=>fl2.click());
 
         // ════════ AUDIO ════════
         const fPl=tAudio.addFolder({title:'▶ Lecteur',expanded:true});
@@ -820,6 +942,7 @@ export class App {
         fExp.addButton({title:'📋 Copier Config'})  .on('click',()=>this._copyConfig());
         fExp.addButton({title:'🔗 Copier URL partage'}).on('click',()=>this._copyShareUrl());
         fExp.addButton({title:'🖊 GLSL Code'})       .on('click',()=>this.generateCode());
+        fExp.addButton({title:'🥽 Entrer VR/WebXR'}).on('click',()=>this._enterXR());
         tScene.addBlade({view:'separator'});
         tScene.addButton({title:'🔄 Reset Factory'}).on('click',()=>{ if(confirm('Réinitialiser ?')){ localStorage.removeItem('shaderStudioV5'); location.reload(); } });
 
@@ -866,6 +989,13 @@ export class App {
             }
         });
 
+        const fOsc = tMidi.addFolder({ title:'📡 OSC (WebSocket)', expanded:false });
+        this._oscStatusB = fOsc.addBinding(this.oscState, 'status', { label:'État', readonly:true });
+        fOsc.addBinding(this.oscState, 'url', { label:'WS URL' });
+        fOsc.addBinding(this.oscState, 'route', { label:'Route' });
+        fOsc.addButton({ title:'🔌 Connecter OSC' }).on('click', () => this._connectOsc());
+        fOsc.addButton({ title:'🔌 Déconnecter OSC' }).on('click', () => this._disconnectOsc());
+
         // ════════ SHADERTOY ════════
         this._buildShaderToyTab(tST);
 
@@ -883,6 +1013,72 @@ export class App {
             this._recordHistory();
             try { localStorage.setItem('shaderStudioV5', JSON.stringify({shader:this.debugObject, audio:this.audioDB})); } catch(e) {}
         });
+    }
+
+    async _enterXR() {
+        try {
+            if (!navigator.xr) {
+                this._showError('WebXR non supporté sur ce navigateur');
+                return;
+            }
+            if (!this.xrHelper) {
+                this.xrHelper = await this.scene.createDefaultXRExperienceAsync({});
+            }
+            await this.xrHelper.baseExperience.enterXRAsync('immersive-vr', 'local-floor');
+            this._showSuccess('🥽 Session VR lancée');
+        } catch (e) {
+            this._showError(`WebXR erreur: ${e.message}`);
+        }
+    }
+
+    _connectOsc() {
+        this._disconnectOsc();
+        try {
+            this.oscSocket = new WebSocket(this.oscState.url);
+            this.oscState.status = 'Connexion…';
+            this._oscStatusB?.refresh();
+            this.oscSocket.onopen = () => {
+                this.oscState.status = '✅ Connecté';
+                this._oscStatusB?.refresh();
+            };
+            this.oscSocket.onclose = () => {
+                this.oscState.status = 'Déconnecté';
+                this._oscStatusB?.refresh();
+            };
+            this.oscSocket.onerror = () => {
+                this.oscState.status = '❌ Erreur WS';
+                this._oscStatusB?.refresh();
+            };
+            this.oscSocket.onmessage = (event) => {
+                let data;
+                try { data = JSON.parse(event.data); } catch { return; }
+                const address = data.address || '';
+                const args = Array.isArray(data.args) ? data.args : [data.value];
+                if (!address.startsWith(this.oscState.route)) return;
+                const paramId = address.split('/').pop();
+                const value = Number(args[0]);
+                const p = params.find(x => x.id === paramId);
+                if (!p || Number.isNaN(value)) return;
+                const clamped = p.type === 'float'
+                    ? Math.min(p.max ?? 1, Math.max(p.min ?? 0, value))
+                    : Boolean(value);
+                this.debugObject[paramId] = clamped;
+                this._applyChange(p, clamped);
+                this.pane.refresh();
+            };
+        } catch (e) {
+            this.oscState.status = `❌ ${e.message}`;
+            this._oscStatusB?.refresh();
+        }
+    }
+
+    _disconnectOsc() {
+        if (this.oscSocket) {
+            this.oscSocket.close();
+            this.oscSocket = null;
+        }
+        this.oscState.status = 'Déconnecté';
+        this._oscStatusB?.refresh();
     }
 
     async _connectMidi() {
@@ -963,6 +1159,12 @@ export class App {
         fCfg.addBinding(this.videoDB,'resolution',{label:'Résolution',options:Object.fromEntries(resKeys.map(k=>[k,k]))});
         fCfg.addBinding(this.videoDB,'fps',{label:'FPS',options:{'24fps':24,'30fps':30,'60fps':60}});
 
+        const fGif = tab.addFolder({title:'🧩 GIF (beta)', expanded:false});
+        fGif.addBinding(this._gifState, 'fps', {label:'GIF FPS', min:6, max:24, step:1});
+        fGif.addBinding(this._gifState, 'duration', {label:'Durée (s)', min:1, max:10, step:1});
+        fGif.addBinding(this._gifState, 'status', {label:'État', readonly:true});
+        fGif.addButton({title:'🎞 Export GIF'}).on('click',()=>this._startGifExport());
+
         const fStatus=tab.addFolder({title:'📹 État',expanded:true});
         this._recStatusB  =fStatus.addBinding(this._recordState,'status',  {label:'État',   readonly:true});
         this._recProgressB=fStatus.addBinding(this._recordState,'progress',{label:'Progress %',readonly:true,view:'graph',min:0,max:100});
@@ -976,6 +1178,28 @@ export class App {
             this._recordState.status='⏹ Arrêté';
             this._recStatusB?.refresh();
         });
+    }
+
+    _startGifExport() {
+        if (!MediaRecorder.isTypeSupported('image/gif')) {
+            this._gifState.status = '⚠️ GIF natif non supporté';
+            this._showError('Export GIF non supporté par ce navigateur. Utilisez WebM/MP4.');
+            return;
+        }
+        this._gifState.status = '⏺ Enregistrement GIF…';
+        const stream = this.canvas.captureStream(this._gifState.fps);
+        const rec = new MediaRecorder(stream, { mimeType: 'image/gif' });
+        const chunks = [];
+        rec.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+        rec.onstop = () => {
+            const blob = new Blob(chunks, { type: 'image/gif' });
+            const url = URL.createObjectURL(blob);
+            VideoRecorder.download(url, `shader-studio-${Date.now()}.gif`);
+            this._gifState.status = '✅ GIF exporté';
+            this.pane?.refresh();
+        };
+        rec.start(100);
+        setTimeout(() => rec.stop(), this._gifState.duration * 1000);
     }
 
     _startRecording(){
@@ -1542,6 +1766,7 @@ export class App {
         const files = Array.from(e.dataTransfer.files);
         const imageFile = files.find(f => f.type.startsWith('image/'));
         const audioFile = files.find(f => f.type.startsWith('audio/'));
+        const videoFile = files.find(f => f.type.startsWith('video/'));
 
         if(imageFile){
             const url = URL.createObjectURL(imageFile);
@@ -1563,8 +1788,12 @@ export class App {
             });
         }
 
-        if (!imageFile && !audioFile) {
-            this._showError('⚠️ Formats supportés: image/* et audio/*');
+        if (videoFile) {
+            this._setVideoTextureFromFile(videoFile).catch(err => this._showError(`Vidéo invalide: ${err.message}`));
+        }
+
+        if (!imageFile && !audioFile && !videoFile) {
+            this._showError('⚠️ Formats supportés: image/*, video/* et audio/*');
         }
     }
 
@@ -1956,6 +2185,8 @@ void main(void) {
         if (this.shadertoyPass) { this.shadertoyPass.dispose(); this.shadertoyPass = null; }
         if (this._fftTexture)   { this._fftTexture.dispose();  this._fftTexture  = null; }
         if (this.glitchPass)    { this.glitchPass.dispose();   this.glitchPass   = null; }
+        this._stopVideoTexture();
+        this._disconnectOsc();
         this.audio.dispose();
         this.recorder.stop();
         if(this.pane) this.pane.dispose();

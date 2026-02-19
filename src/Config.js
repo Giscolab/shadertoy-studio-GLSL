@@ -61,6 +61,11 @@ export const params = [
     { id:'uGamma',      type:'float', name:'Gamma',      value:1.1, min:0.4, max:2.5 },
     { id:'uTextureMix', type:'float', name:'Texture Mix',value:0.0, min:0.0, max:1.0 },
 
+    { id:'uLayerBlend1', type:'float', name:'Layer1 Mode', value:0.0, min:0.0, max:2.0 },
+    { id:'uLayerBlend2', type:'float', name:'Layer2 Mode', value:1.0, min:0.0, max:2.0 },
+    { id:'uLayerOpacity1', type:'float', name:'Layer1 Opacity', value:0.0, min:0.0, max:1.0 },
+    { id:'uLayerOpacity2', type:'float', name:'Layer2 Opacity', value:0.0, min:0.0, max:1.0 },
+
     // ── Flags ────────────────────────────────────────────────────────────────
     { id:'cyberpunkMode', type:'boolean', name:'RGB Shift',   value:false },
     { id:'glitchMode',    type:'boolean', name:'Glitch',      value:false },

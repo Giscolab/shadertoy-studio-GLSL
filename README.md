@@ -13,7 +13,7 @@
 ### 🧠 Moteur Génératif
 *   **18 Géométries Paramétriques** : Sphère, Tore, Klein Bottle, Ruban de Möbius, Cœur, Engrenage...
 *   **15 Algorithmes de Bruit** : Simplex, Voronoi, FBM, Domain Warping, Reaction-Diffusion, Mandelbrot...
-*   **22 Presets Visuels** : Cyberpunk, Lava Planet, Deep Ocean, Glitch Matrix...
+*   **50 Presets Visuels** : Cyberpunk, Lava Planet, Deep Ocean, Glitch Matrix...
 
 ### 🎵 Audio Réactivité (Audio Engine)
 *   Analyse spectrale en temps réel (FFT).
@@ -31,6 +31,9 @@
 *   **Effets Cinématiques** : Bloom, RGB Shift (Aberration Chromatique), Glitch, Pixel Art, Vignette.
 *   **Export Vidéo** : Enregistrez des boucles parfaites en **WebM/MP4** (60 FPS) avec choix du bitrate et de la résolution (jusqu'à 4K).
 *   **Export Image** : Capture d'écran haute résolution (PNG).
+*   **Capture Transparente** : Export PNG avec fond transparent (alpha).
+*   **Partage par URL** : Copiez un lien qui embarque toute la configuration (Base64 dans le hash).
+*   **Undo / Redo** : Historique des réglages (boutons et raccourcis clavier Ctrl/Cmd+Z, Ctrl/Cmd+Y).
 *   **Export Code** : Générez le code GLSL final pour l'utiliser dans vos propres projets.
 
 ### 🛠 Interface Pro

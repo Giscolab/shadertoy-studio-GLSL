@@ -3,12 +3,12 @@
 Voici les fonctionnalités prévues pour les futures versions de Shader Studio.
 
 ## 🚀 Court Terme (v5.x)
-- [ ] **Support MIDI** : Contrôler les paramètres (vitesse, couleurs, effets) via un contrôleur physique externe (Web MIDI API).
-- [ ] **Partage par URL** : Encoder toute la configuration (JSON) en Base64 dans le hash de l'URL pour partager instantanément une création.
-- [ ] **Drag & Drop Amélioré** : Support du glisser-déposer pour les textures (images) et les fichiers audio directement sur le canvas.
-- [ ] **Nouveaux Presets** : Étendre la bibliothèque à 50 presets couvrant plus de styles artistiques.
-- [ ] **Undo/Redo** : Historique des modifications pour annuler ou rétablir les actions rapidement.
-- [ ] **Capture Transparente** : Option pour exporter des PNG avec fond transparent (alpha channel) pour le compositing.
+- [x] **Support MIDI** : Contrôler les paramètres (vitesse, couleurs, effets) via un contrôleur physique externe (Web MIDI API).
+- [x] **Partage par URL** : Encoder toute la configuration (JSON) en Base64 dans le hash de l'URL pour partager instantanément une création.
+- [x] **Drag & Drop Amélioré** : Support du glisser-déposer pour les textures (images) et les fichiers audio directement sur le canvas.
+- [x] **Nouveaux Presets** : Étendre la bibliothèque à 50 presets couvrant plus de styles artistiques.
+- [x] **Undo/Redo** : Historique des modifications pour annuler ou rétablir les actions rapidement.
+- [x] **Capture Transparente** : Option pour exporter des PNG avec fond transparent (alpha channel) pour le compositing.
 
 ## 🛠 Moyen Terme (v6.0)
 - [ ] **Textures Vidéo / Webcam** : Utiliser le flux de la caméra ou un fichier vidéo comme texture d'entrée (`uTexture`).

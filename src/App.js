@@ -176,6 +176,8 @@ export class App {
 
         this._playerState = { status:'⏹ Stopped', time:'0:00 / 0:00', bpm:'-- BPM', file:'Aucun fichier' };
         this._recordState = { status:'⏹ Prêt', progress:0, info:'' };
+        this._history = { undoStack: [], redoStack: [], max: 80, isRestoring: false };
+        this._dragDepth = 0;
 
         this.mouse       = new BABYLON.Vector2(0.5,0.5);
         this.targetMouse = new BABYLON.Vector2(0.5,0.5);
@@ -187,6 +189,10 @@ export class App {
         this.toggleUIHandler   = this.toggleUI.bind(this);
         this.toggleEditorHandler = this.toggleEditor.bind(this);
         this.dropHandler       = this.onDrop.bind(this);
+        this.dragEnterHandler  = this.onDragEnter.bind(this);
+        this.dragLeaveHandler  = this.onDragLeave.bind(this);
+        this.dragOverHandler   = this.onDragOver.bind(this);
+        this.keydownHandler    = this.onKeyDown.bind(this);
 
         this.setupErrorHandler();
         this.init();
@@ -212,6 +218,8 @@ export class App {
             const savedMidi=localStorage.getItem('shaderStudioV5_midi');
             if(savedMidi) this.midi.mappings = JSON.parse(savedMidi);
         } catch(e){}
+
+        this._loadConfigFromHash();
 
         // Caméra (ArcRotate remplace OrbitControls)
         this.camera = new BABYLON.ArcRotateCamera("Camera", -Math.PI/2, Math.PI/2, 2.5, BABYLON.Vector3.Zero(), this.scene);
@@ -244,8 +252,11 @@ export class App {
         document.getElementById('close-modal').addEventListener('click', this.closeModalHandler);
         document.getElementById('ui-toggle').addEventListener('click', this.toggleUIHandler);
         document.getElementById('editor-toggle').addEventListener('click', this.toggleEditorHandler);
-        this.canvas.addEventListener('dragover', e => e.preventDefault());
+        this.canvas.addEventListener('dragenter', this.dragEnterHandler);
+        this.canvas.addEventListener('dragleave', this.dragLeaveHandler);
+        this.canvas.addEventListener('dragover', this.dragOverHandler);
         this.canvas.addEventListener('drop', this.dropHandler);
+        window.addEventListener('keydown', this.keydownHandler);
 
         // ShaderToy iMouse tracking
         this.canvas.addEventListener('mousemove', e => {
@@ -278,7 +289,104 @@ export class App {
             this.animate();
             this.scene.render();
         });
+
+        this._recordHistory('init');
     }
+
+    _serializeState() {
+        const shader = {};
+        params.forEach(p => { shader[p.id] = this.debugObject[p.id]; });
+        return {
+            shader,
+            audio: { ...this.audioDB },
+            midi:  { ...this.midi.mappings },
+        };
+    }
+
+    _applySerializedState(state) {
+        if (!state) return;
+
+        if (state.shader) {
+            Object.entries(state.shader).forEach(([k, v]) => {
+                if (k in this.debugObject) this.debugObject[k] = v;
+            });
+        }
+        if (state.audio) {
+            Object.entries(state.audio).forEach(([k, v]) => {
+                if (k in this.audioDB) this.audioDB[k] = v;
+            });
+        }
+        if (state.midi) {
+            this.midi.mappings = { ...state.midi };
+            localStorage.setItem('shaderStudioV5_midi', JSON.stringify(this.midi.mappings));
+        }
+
+        params.forEach(p => this._applyChange(p, this.debugObject[p.id]));
+        this._updateMaterialUniforms();
+        this.pane?.refresh();
+    }
+
+    _encodeStateToHash(state) {
+        const json = JSON.stringify(state);
+        return btoa(unescape(encodeURIComponent(json)));
+    }
+
+    _decodeStateFromHash(hashValue) {
+        try {
+            const raw = hashValue.startsWith('#') ? hashValue.slice(1) : hashValue;
+            if (!raw) return null;
+            const json = decodeURIComponent(escape(atob(raw)));
+            return JSON.parse(json);
+        } catch (e) {
+            console.warn('Hash config invalide:', e);
+            return null;
+        }
+    }
+
+    _loadConfigFromHash() {
+        const cfg = this._decodeStateFromHash(window.location.hash);
+        if (!cfg) return;
+        if (cfg.shader) Object.assign(this.debugObject, cfg.shader);
+        if (cfg.audio) Object.assign(this.audioDB, cfg.audio);
+        if (cfg.midi) this.midi.mappings = { ...cfg.midi };
+    }
+
+    _copyShareUrl() {
+        const state = this._serializeState();
+        const hash  = this._encodeStateToHash(state);
+        const url   = `${window.location.origin}${window.location.pathname}#${hash}`;
+        navigator.clipboard.writeText(url).then(() => this._showSuccess('🔗 URL de partage copiée !'));
+    }
+
+    _recordHistory() {
+        if (this._history.isRestoring) return;
+        const snapshot = JSON.stringify(this._serializeState());
+        const stack = this._history.undoStack;
+        if (stack[stack.length - 1] === snapshot) return;
+        stack.push(snapshot);
+        if (stack.length > this._history.max) stack.shift();
+        this._history.redoStack.length = 0;
+    }
+
+    _restoreFromHistory(targetStack, oppositeStack) {
+        if (targetStack === this._history.undoStack && targetStack.length < 2) return;
+        if (targetStack === this._history.redoStack && targetStack.length < 1) return;
+        const current = JSON.stringify(this._serializeState());
+        oppositeStack.push(current);
+        let snapshot;
+        if (targetStack === this._history.undoStack) {
+            targetStack.pop();
+            snapshot = targetStack[targetStack.length - 1];
+        } else {
+            snapshot = targetStack.pop();
+        }
+        this._history.isRestoring = true;
+        this._applySerializedState(JSON.parse(snapshot));
+        this._history.isRestoring = false;
+    }
+
+    undo() { this._restoreFromHistory(this._history.undoStack, this._history.redoStack); }
+    redo() { this._restoreFromHistory(this._history.redoStack, this._history.undoStack); }
 
     _createShaderMaterial(noiseType, texture, matcap, customFragment = null) {
         if (this.material) this.material.dispose();
@@ -708,7 +816,9 @@ export class App {
         tScene.addBlade({view:'separator'});
         const fExp=tScene.addFolder({title:'💾 Screenshot & Config',expanded:true});
         fExp.addButton({title:'📸 Screenshot (2×)'}).on('click',()=>this.saveScreenshot());
+        fExp.addButton({title:'🪟 Screenshot Transparent'}).on('click',()=>this.saveScreenshot(true));
         fExp.addButton({title:'📋 Copier Config'})  .on('click',()=>this._copyConfig());
+        fExp.addButton({title:'🔗 Copier URL partage'}).on('click',()=>this._copyShareUrl());
         fExp.addButton({title:'🖊 GLSL Code'})       .on('click',()=>this.generateCode());
         tScene.addBlade({view:'separator'});
         tScene.addButton({title:'🔄 Reset Factory'}).on('click',()=>{ if(confirm('Réinitialiser ?')){ localStorage.removeItem('shaderStudioV5'); location.reload(); } });
@@ -759,12 +869,18 @@ export class App {
         // ════════ SHADERTOY ════════
         this._buildShaderToyTab(tST);
 
+        // ════════ UNDO / REDO ════════
+        const fHist = tScene.addFolder({ title:'↩️ Historique', expanded:false });
+        fHist.addButton({ title:'↩️ Undo (Ctrl/Cmd+Z)' }).on('click', () => this.undo());
+        fHist.addButton({ title:'↪️ Redo (Ctrl/Cmd+Y)' }).on('click', () => this.redo());
+
         // ════════ PERF ════════
         this.fpsGraph = tPerf.addBlade({view:'fpsgraph', label:'FPS', lineCount:2});
         this.debugObject.ms = 0;
         tPerf.addBinding(this.debugObject, 'ms', {label:'ms/frame', readonly:true, view:'graph', min:0, max:50});
 
         this.pane.on('change', () => {
+            this._recordHistory();
             try { localStorage.setItem('shaderStudioV5', JSON.stringify({shader:this.debugObject, audio:this.audioDB})); } catch(e) {}
         });
     }
@@ -815,6 +931,7 @@ export class App {
                     this.audioDB[p.id] = newValue;
                 }
                 this.pane.refresh();
+                this._recordHistory();
             }
         }
     }
@@ -1384,6 +1501,7 @@ export class App {
             if(p) this._applyChange(p,v);
         });
         this.pane.refresh();
+        this._recordHistory();
     }
 
     // ── Divers ───────────────────────────────────────────────────────────────
@@ -1398,22 +1516,71 @@ export class App {
         this.targetMouse.y = 1 - e.clientY / this.canvas.height; 
     }
     
+    onDragEnter(e) {
+        e.preventDefault();
+        this._dragDepth++;
+        this.canvas.classList.add('drag-over');
+    }
+
+    onDragLeave(e) {
+        e.preventDefault();
+        this._dragDepth = Math.max(0, this._dragDepth - 1);
+        if (this._dragDepth === 0) this.canvas.classList.remove('drag-over');
+    }
+
+    onDragOver(e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+    }
+
     onDrop(e){
         e.preventDefault();
+        this._dragDepth = 0;
+        this.canvas.classList.remove('drag-over');
         if(!e.dataTransfer.files.length) return;
-        const f=e.dataTransfer.files[0];
-        if(f.type.startsWith('image/')){
-            const url = URL.createObjectURL(f);
-            const tex = new BABYLON.Texture(url, this.scene);
+
+        const files = Array.from(e.dataTransfer.files);
+        const imageFile = files.find(f => f.type.startsWith('image/'));
+        const audioFile = files.find(f => f.type.startsWith('audio/'));
+
+        if(imageFile){
+            const url = URL.createObjectURL(imageFile);
+            const tex = new BABYLON.Texture(url, this.scene, true, false, BABYLON.Texture.TRILINEAR_SAMPLINGMODE, ()=>{
+                this._showSuccess(`🖼 Texture chargée: ${imageFile.name}`);
+                URL.revokeObjectURL(url);
+            });
             this.material.setTexture("uTexture", tex);
             this.currentTexture = tex;
-        } else if(f.type.startsWith('audio/')){
-            this._playerState.file=f.name;
+        }
+
+        if(audioFile){
+            this._playerState.file=audioFile.name;
             this._playerState.status='⏳ Chargement…'; this.pane.refresh();
-            this.audio.loadFile(f).then(()=>{
+            this.audio.loadFile(audioFile).then(()=>{
                 this.audio.play();
                 this._playerState.status='▶ Lecture'; this.pane.refresh();
+                this._showSuccess(`🎵 Audio chargé: ${audioFile.name}`);
             });
+        }
+
+        if (!imageFile && !audioFile) {
+            this._showError('⚠️ Formats supportés: image/* et audio/*');
+        }
+    }
+
+    onKeyDown(e) {
+        const isMod = e.ctrlKey || e.metaKey;
+        if (!isMod) return;
+
+        const key = e.key.toLowerCase();
+        if (key === 'z' && !e.shiftKey) {
+            e.preventDefault();
+            this.undo();
+            return;
+        }
+        if (key === 'y' || (key === 'z' && e.shiftKey)) {
+            e.preventDefault();
+            this.redo();
         }
     }
 
@@ -1426,8 +1593,17 @@ export class App {
         setTimeout(()=>{ l.style.opacity='0'; setTimeout(()=>l.style.display='none',800); },600);
     }
 
-    saveScreenshot(){
+    saveScreenshot(transparent = false){
+        if (!transparent) {
+            BABYLON.Tools.CreateScreenshot(this.engine, this.camera, { precision: 2 });
+            return;
+        }
+
+        const prev = this.scene.clearColor.clone();
+        this.scene.clearColor = new BABYLON.Color4(prev.r, prev.g, prev.b, 0);
         BABYLON.Tools.CreateScreenshot(this.engine, this.camera, { precision: 2 });
+        this.scene.clearColor = prev;
+        this._showSuccess('🪟 PNG transparent exporté');
     }
 
     _copyConfig(){
@@ -1772,6 +1948,10 @@ void main(void) {
     dispose(){
         this.engine.stopRenderLoop();
         window.removeEventListener('resize',this.resizeHandler);
+        window.removeEventListener('keydown', this.keydownHandler);
+        this.canvas.removeEventListener('dragenter', this.dragEnterHandler);
+        this.canvas.removeEventListener('dragleave', this.dragLeaveHandler);
+        this.canvas.removeEventListener('dragover', this.dragOverHandler);
         this.canvas.removeEventListener('drop',this.dropHandler);
         if (this.shadertoyPass) { this.shadertoyPass.dispose(); this.shadertoyPass = null; }
         if (this._fftTexture)   { this._fftTexture.dispose();  this._fftTexture  = null; }

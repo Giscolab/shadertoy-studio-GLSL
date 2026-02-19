@@ -18,13 +18,13 @@
     <script src="https://cdn.babylonjs.com/babylon.js"></script>
     <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
     <script src="https://cdn.babylonjs.com/gui/babylon.gui.min.js"></script>
-    
+
     <!-- CodeMirror (Editor) -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/dracula.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/clike/clike.min.js"></script>
-    
+
     <script>
         window.onerror = function(message, source, lineno, colno, error) {
             const toast = document.getElementById('error-toast');
@@ -36,13 +36,13 @@
     <div id="loader"><div class="spinner"></div><div class="loader-text">Initialisation GPU...</div></div>
     <div id="error-toast"></div>
     <div id="recording-indicator" style="display:none;"><div class="red-dot"></div><span>REC</span></div>
-    
+
     <h1 id="app-title">GLSL & Shadertoy Studio</h1>
-    
+
     <!-- UI Toggles -->
     <button id="editor-toggle" title="Toggle Editor">{}</button>
     <button id="ui-toggle" title="Toggle UI">☰</button>
-    
+
     <!-- Editor Container (Left) -->
     <aside id="editor-container" class="hidden">
         <div class="editor-header">
@@ -54,8 +54,9 @@
             <button id="btn-compile">▶ Compile (Ctrl+S)</button>
             <button id="btn-st-import">📂 Import</button>
             <button id="btn-save">💾 Save</button>
+            <button id="btn-export-shadertoy">🚀 Export Shadertoy</button>
             <button id="btn-clear">🗑 Clear</button>
-            <button id="btn-shadertoy">🎮 ShaderToy Mode</button> 
+            <button id="btn-shadertoy">🎮 ShaderToy Mode</button>
         </div>
         <div class="editor-statusbar">
             <span id="st-badge" style="display:none;" class="st-badge">🎮 ShaderToy détecté</span>

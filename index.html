@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GLSL & Shadertoy Studio</title>
+    <link rel="stylesheet" href="./style.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎨</text></svg>">
+    <script type="importmap">
+        {
+            "imports": {
+                "tweakpane": "https://cdn.jsdelivr.net/npm/tweakpane@4.0.5/dist/tweakpane.min.js",
+                "@tweakpane/plugin-essentials": "https://cdn.jsdelivr.net/npm/@tweakpane/plugin-essentials@0.2.1/dist/tweakpane-plugin-essentials.min.js"
+            }
+        }
+    </script>
+    <!-- Babylon.js Core & Loaders -->
+    <script src="https://cdn.babylonjs.com/babylon.js"></script>
+    <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
+    <script src="https://cdn.babylonjs.com/gui/babylon.gui.min.js"></script>
+    
+    <!-- CodeMirror (Editor) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/dracula.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/clike/clike.min.js"></script>
+    
+    <script>
+        window.onerror = function(message, source, lineno, colno, error) {
+            const toast = document.getElementById('error-toast');
+            if (toast) { toast.textContent = '⚠️ ' + message; toast.classList.add('visible'); }
+        };
+    </script>
+</head>
+<body>
+    <div id="loader"><div class="spinner"></div><div class="loader-text">Initialisation GPU...</div></div>
+    <div id="error-toast"></div>
+    <div id="recording-indicator" style="display:none;"><div class="red-dot"></div><span>REC</span></div>
+    
+    <h1 id="app-title">GLSL & Shadertoy Studio</h1>
+    
+    <!-- UI Toggles -->
+    <button id="editor-toggle" title="Toggle Editor">{}</button>
+    <button id="ui-toggle" title="Toggle UI">☰</button>
+    
+    <!-- Editor Container (Left) -->
+    <aside id="editor-container" class="hidden">
+        <div class="editor-header">
+            <h3>Live Editor</h3>
+            <span class="editor-subtitle">GLSL Fragment</span>
+        </div>
+        <textarea id="glsl-editor"></textarea>
+        <div class="editor-toolbar">
+            <button id="btn-compile">▶ Compile (Ctrl+S)</button>
+            <button id="btn-st-import">📂 Import</button>
+            <button id="btn-save">💾 Save</button>
+            <button id="btn-clear">🗑 Clear</button>
+            <button id="btn-shadertoy">🎮 ShaderToy Mode</button> 
+        </div>
+        <div class="editor-statusbar">
+            <span id="st-badge" style="display:none;" class="st-badge">🎮 ShaderToy détecté</span>
+            <span class="editor-hint">Ctrl+S pour compiler · Drag &amp; drop audio/image</span>
+        </div>
+    </aside>
+
+    <div id="canvas-container"><canvas></canvas></div>
+    <aside id="ui-container"></aside>
+    <div id="code-modal" style="display:none;">
+        <div class="modal-content">
+            <button id="close-modal">×</button>
+            <h3>GLSL Fragment Shader</h3>
+            <pre><code id="glsl-code"></code></pre>
+        </div>
+    </div>
+    <button id="start-audio-btn">🎤 Activer l'Audio</button>
+    <script type="module" src="./src/main.js"></script>
+</body>
+</html>

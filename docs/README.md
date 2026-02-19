@@ -79,3 +79,7 @@ Les contributions sont les bienvenues ! Veuillez consulter CONTRIBUTING.md pour 
 ## 📜 Licence
 
 Ce projet est sous licence MIT. Voir le fichier LICENSE pour plus de détails.
+
+---
+
+*Créé avec ❤️ et WebGL.*
